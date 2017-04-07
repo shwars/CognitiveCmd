@@ -21,7 +21,13 @@ namespace Face
                 Console.WriteLine(@"
 face.exe - Cognitive Services Face API command-line client
   face key [<key>] - set service key in face.key text file
-  face detect [<url>|<file>] - call face detection on URL");
+  face detect [<url>|<file>] - call face detection on URL
+  face persongroup name path - upload and train a person group with given name, using photos in path (a subdirectory per person)
+  face persongroup name -list - list people in person group
+  face persongroup name -create - create a person group with given name
+  face persongroup name -delete - delete person group
+  face persongroup -list - list all person groups
+");
                 return;
             }
             switch(args[0])
@@ -33,7 +39,12 @@ face.exe - Cognitive Services Face API command-line client
                     Detect(GetArg(args));
                     break;
                 case "persongroup":
-                    CreatePG(GetArg(args),GetArg(args,2));
+                    if (args.Length>1 && args[1]=="-list")
+                    {
+                        ListPersonGroups();
+                        break;
+                    }
+                    PersonGroup(GetArg(args),GetArg(args,2));
                     break;
                 default:
                     Console.WriteLine($"Unknown command: {args[0]}");
@@ -41,13 +52,39 @@ face.exe - Cognitive Services Face API command-line client
             }
         }
 
-        private static void CreatePG(string name, string path)
+        private static void ListPersonGroups()
         {
-            Console.WriteLine($" - trying to delete person group {name}");
-            try { Client.DeletePersonGroupAsync(name).Wait(); }
-            catch { }
-            Console.WriteLine($" - creating person group {name}");
-            Client.CreatePersonGroupAsync(name, name).Wait();
+            var t = Client.ListPersonGroupsAsync();
+            t.Wait();
+            foreach(var pg in t.Result)
+            {
+                Console.WriteLine($" - {pg.Name} -> {pg.PersonGroupId}");
+            }
+        }
+
+        private static void PersonGroup(string name, string path)
+        {
+            if (path=="-list")
+            {
+                ListPersonGroup(name);
+                return;
+            }
+            if (path == "-delete")
+            {
+                Console.WriteLine($" - deleting person group {name}");
+                try
+                {
+                    Client.DeletePersonGroupAsync(name).Wait();
+                }
+                catch { Console.WriteLine(" - error!"); }
+                return;
+            }
+            if (path == "-create")
+            {
+                Console.WriteLine($" - creating person group {name}");
+                Client.CreatePersonGroupAsync(name, name).Wait();
+                return;
+            }
             var dir = Path.Combine(Environment.CurrentDirectory, path);
             foreach(var dr in Directory.EnumerateDirectories(dir))
             {
@@ -60,9 +97,16 @@ face.exe - Cognitive Services Face API command-line client
                 foreach(var f in Directory.EnumerateFiles(Path.GetFullPath(dr)))
                 {
                     Console.Write($" --- uploading face {Path.GetFileName(f)}");
-                    var t1 = Client.AddPersonFaceAsync(name, pid, OpenStream(f));
-                    t1.Wait();
-                    Console.WriteLine($" -> {t1.Result.PersistedFaceId}");
+                    try
+                    {
+                        var t1 = Client.AddPersonFaceAsync(name, pid, OpenStream(f));
+                        t1.Wait();
+                        Console.WriteLine($" -> {t1.Result.PersistedFaceId}");
+                    }
+                    catch
+                    {
+                        Console.WriteLine(" - error!");
+                    }
                     Task.Delay(1000).Wait();
                 }
             }
@@ -77,6 +121,19 @@ face.exe - Cognitive Services Face API command-line client
                 Task.Delay(5000).Wait();
             }
             Console.WriteLine($" - Status={st}");
+        }
+
+        private static void ListPersonGroup(string name)
+        {
+            var t = Client.GetPersonGroupAsync(name);
+            t.Wait();
+            Console.WriteLine($"Getting info for group name={t.Result.Name}, id={t.Result.PersonGroupId}");
+            var t1 = Client.GetPersonsAsync(t.Result.PersonGroupId);
+            t1.Wait();
+            foreach(var p in t1.Result)
+            {
+                Console.WriteLine($" - person {p.Name}, id={p.PersonId}");
+            }
         }
 
         private static FaceServiceClient _cli;
