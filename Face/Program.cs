@@ -24,6 +24,7 @@ face.exe - Cognitive Services Face API command-line client
   face detect [<url>|<file>] - call face detection on URL
   face persongroup name path - upload and train a person group with given name, using photos in path (a subdirectory per person)
   face persongroup name -list - list people in person group
+  face persongroup name -listjson - list people in person group in json format
   face persongroup name -create - create a person group with given name
   face persongroup name -delete - delete person group
   face persongroup -list - list all person groups
@@ -64,9 +65,9 @@ face.exe - Cognitive Services Face API command-line client
 
         private static void PersonGroup(string name, string path)
         {
-            if (path=="-list")
+            if (path=="-list" || path=="-listjson")
             {
-                ListPersonGroup(name);
+                ListPersonGroup(name,path=="-listjson");
                 return;
             }
             if (path == "-delete")
@@ -123,17 +124,20 @@ face.exe - Cognitive Services Face API command-line client
             Console.WriteLine($" - Status={st}");
         }
 
-        private static void ListPersonGroup(string name)
+        private static void ListPersonGroup(string name,bool json)
         {
             var t = Client.GetPersonGroupAsync(name);
             t.Wait();
             Console.WriteLine($"Getting info for group name={t.Result.Name}, id={t.Result.PersonGroupId}");
             var t1 = Client.GetPersonsAsync(t.Result.PersonGroupId);
             t1.Wait();
-            foreach(var p in t1.Result)
+            if (json) Console.WriteLine("{");
+            foreach (var p in t1.Result)
             {
-                Console.WriteLine($" - person {p.Name}, id={p.PersonId}");
+                if (json) Console.WriteLine("\"{0}\":\"{1}\",", p.PersonId, p.Name);
+                else Console.WriteLine($" - person {p.Name}, id={p.PersonId}");
             }
+            if (json) Console.WriteLine("}");
         }
 
         private static FaceServiceClient _cli;
@@ -141,7 +145,7 @@ face.exe - Cognitive Services Face API command-line client
         {
             get
             {
-                if (_cli == null) _cli = new FaceServiceClient(GetKey());
+                if (_cli == null) _cli = new FaceServiceClient(GetKey(), "https://westeurope.api.cognitive.microsoft.com/face/v1.0");
                 return _cli;
             }
         }
