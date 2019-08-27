@@ -20,7 +20,7 @@ namespace Face
             {
                 Console.WriteLine(@"
 face.exe - Cognitive Services Face API command-line client
-  face key [<key>] - set service key in face.key text file
+  face key [<key>] [<region>] - set service key in face.key text file
   face detect [<url>|<file>] - call face detection on URL
   face persongroup name path - upload and train a person group with given name, using photos in path (a subdirectory per person)
   face persongroup name -list - list people in person group
@@ -34,7 +34,18 @@ face.exe - Cognitive Services Face API command-line client
             switch(args[0])
             {
                 case "key":
-                    WriteKeyFile(GetArg(args));
+                    string u, v;
+                    if (args.Length>=3)
+                    {
+                        u = GetArg(args, 1);
+                        v = GetArg(args, 2);
+                    }
+                    else
+                    {
+                        u = GetArg(args, 1);
+                        v = "westus";
+                    }
+                    WriteKeyFile(u,v);
                     break;
                 case "detect":
                     Detect(GetArg(args));
@@ -145,9 +156,18 @@ face.exe - Cognitive Services Face API command-line client
         {
             get
             {
-                if (_cli == null) _cli = new FaceServiceClient(GetKey(), "https://westeurope.api.cognitive.microsoft.com/face/v1.0");
+                (var u, var v) = GetKey();
+                // Console.WriteLine("Using key={0} and uri={1}", u, MakeApiUrl(v));
+                if (_cli == null) _cli = new FaceServiceClient(u, MakeApiUrl(v));
                 return _cli;
             }
+        }
+
+        private static string MakeApiUrl(string v)
+        {
+            if (!v.Contains('.')) v = string.Format("https://{0}.api.cognitive.microsoft.com/face/v1.0", v);
+            if (!(v.StartsWith("http://")||v.StartsWith("https://"))) v = "http://" + v;
+            return v;
         }
 
         private static void Detect(string arg)
@@ -185,28 +205,30 @@ face.exe - Cognitive Services Face API command-line client
             else return args[n];
         }
 
-        private static void WriteKeyFile(string v)
+        private static void WriteKeyFile(string v, string w)
         {
             var fn = Path.Combine(Dir, "face.key");
             var f = File.CreateText(fn);
             f.WriteLine(v);
+            f.WriteLine(w);
             f.Close();
         }
 
-        private static string GetKey()
+        private static (string,string) GetKey()
         {
             var fn = Path.Combine(Dir, "face.key");
             try
             {
                 var f = File.OpenText(fn);
                 var s = f.ReadLine();
+                var r = f.ReadLine();
                 f.Close();
-                return s;
+                return (s,r);
             }
             catch
             {
                 Console.WriteLine($"Cannot read face api key from {fn}");
-                return "";
+                return ("","");
             }
         }
 
